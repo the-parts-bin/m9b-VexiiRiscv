@@ -30,6 +30,10 @@ object Generate extends App {
   assert(new scopt.OptionParser[Unit]("VexiiRiscv") {
     help("help").text("prints this usage text")
     opt[Unit]("report-model") action { (v, c) => reportModel = true }
+    // Emit memories with byte-masked writes as Ram_1w_1rs blackboxes, to be
+    // implemented with the target's RAM primitives (synthesis tools infer
+    // byte masks inconsistently, e.g. one RAM block per byte lane).
+    opt[Unit]("blackbox-byte-enables") action { (v, c) => sc.addStandardMemBlackboxing(blackboxByteEnables) }
     param.addOptions(this)
     analysis.addOption(this)
     ParamSimple.addOptionRegion(this, regions)
