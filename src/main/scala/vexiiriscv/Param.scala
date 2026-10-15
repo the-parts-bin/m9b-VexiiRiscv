@@ -154,6 +154,7 @@ class ParamSimple() {
   var fetchBus = FetchBusEnum.native
   var lsuBus = LsuBusEnum.native
   var lsuL1Bus = LsuL1BusEnum.native
+  var lsuL1WishboneBuffered = true
   var lsuSoftwarePrefetch = false
   var lsuHardwarePrefetch = "none"
   var lsuStoreBufferSlots = 0
@@ -712,6 +713,7 @@ class ParamSimple() {
     opt[Unit]("lsu-wishbone") action { (v, c) => lsuBus = LsuBusEnum.wishbone }
     opt[Unit]("lsu-l1-axi4") action { (v, c) => lsuL1Bus = LsuL1BusEnum.axi4 }
     opt[Unit]("lsu-l1-wishbone") action { (v, c) => lsuL1Bus = LsuL1BusEnum.wishbone }
+    opt[Unit]("lsu-l1-wishbone-unbuffered") action { (v, c) => lsuL1WishboneBuffered = false }
     opt[Unit]("fetch-l1") action { (v, c) => fetchL1Enable = true }
     opt[Unit]("lsu-l1") action { (v, c) => lsuL1Enable = true }
     opt[Int]("fetch-l1-sets").unbounded() action { (v, c) => fetchL1Sets = v }
@@ -1104,7 +1106,7 @@ class ParamSimple() {
       lsuL1Bus match {
         case LsuL1BusEnum.native =>
         case LsuL1BusEnum.axi4 => plugins += new LsuL1Axi4Plugin()
-        case LsuL1BusEnum.wishbone => plugins += new LsuL1WishbonePlugin()
+        case LsuL1BusEnum.wishbone => plugins += new LsuL1WishbonePlugin(lsuL1WishboneBuffered)
       }
     }
 
