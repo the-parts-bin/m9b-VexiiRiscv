@@ -101,6 +101,7 @@ object ParamSimple{
  * - Thenthen you should get a functional VexiiRiscv.
  */
 class ParamSimple() {
+  var lsuL1WishboneBuffered = true
   var xlen = 32
   var extension = ExtensionManager(Set("zicsr", "zifencei"))
   var withAlignerBuffer = false
@@ -676,6 +677,7 @@ class ParamSimple() {
       .text("Add comma-separated ISA extensions; repeatable.")
     opt[Seq[String]]("without-isa").unbounded().action { (v, c) => removeISA(v: _*) }
       .text("Remove comma-separated ISA extensions; repeatable.")
+    opt[Unit]("lsu-l1-wishbone-unbuffered") action { (v, c) => lsuL1WishboneBuffered = false }
     opt[Unit]("with-rvm").action { (v, c) => addISA("m") }
       .text("Enable M extension; suggest --with-isa m.")
     opt[Unit]("with-rve").action { (v, c) => addISA("e") }
@@ -1247,7 +1249,7 @@ class ParamSimple() {
       lsuL1Bus match {
         case LsuL1BusEnum.native =>
         case LsuL1BusEnum.axi4 => plugins += new LsuL1Axi4Plugin()
-        case LsuL1BusEnum.wishbone => plugins += new LsuL1WishbonePlugin()
+        case LsuL1BusEnum.wishbone => plugins += new LsuL1WishbonePlugin(lsuL1WishboneBuffered)
       }
     }
 

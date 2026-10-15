@@ -306,7 +306,10 @@ case class LsuL1Bus(p : LsuL1BusParameter) extends Bundle with IMasterSlave {
 
 
 
-  def toWishbone(): Wishbone = new Composite(this, "toWishbone"){
+  // bufferCmd = false drives the Wishbone bus straight from the command arbiter
+  // instead of through a register stage: a refill reaches the bus one cycle
+  // earlier, at the cost of a longer combinational path into the interconnect.
+  def toWishbone(bufferCmd : Boolean = true): Wishbone = new Composite(this, "toWishbone"){
     val wishboneConfig = p.toWishboneConfig()
     val bus = Wishbone(wishboneConfig)
     val addressShift = log2Up(p.dataWidth/8)
@@ -354,7 +357,7 @@ case class LsuL1Bus(p : LsuL1BusParameter) extends Bundle with IMasterSlave {
       serialized.data := write.cmd.data
       serialized.last := counter.andR
 
-      val buffered = serialized.stage()
+      val buffered = if (bufferCmd) serialized.stage() else serialized
     }
 
     bus.ADR := arbiter.buffered.address >> addressShift
