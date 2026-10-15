@@ -175,6 +175,7 @@ class ParamSimple() {
   var fetchForkAt = 0
   var btbSets = 512
   var btbHashWidth = 16
+  var btbTargetWidth = 0
   var embeddedJtagTap = false
   var embeddedJtagInstruction = false
   var embeddedJtagCd: ClockDomain = null
@@ -697,6 +698,7 @@ class ParamSimple() {
     opt[Unit]("without-late-alu") action { (v, c) => withLateAlu = false; storeRs2Late = false }
     opt[Int]("btb-sets") action { (v, c) => btbSets = v }
     opt[Int]("btb-hash-width") action { (v, c) => btbHashWidth = v }
+    opt[Int]("btb-target-width") action { (v, c) => btbTargetWidth = v }
     opt[Unit]("regfile-async") action { (v, c) => regFileSync = false }
     opt[Unit]("regfile-sync") action { (v, c) => regFileSync = true }
     opt[Unit]("regfile-dual-ports") action { (v, c) => regFileDualPortRam = true }
@@ -842,6 +844,7 @@ class ParamSimple() {
         dualPortRam = btbDualPortRam,
         rasDepth = if(withRas) 4 else 0,
         hashWidth = btbHashWidth,
+        targetWidth = btbTargetWidth,
         readAt = 0,
         hitAt = 1+relaxedBtbHit.toInt,
         jumpAt = 1+relaxedBtb.toInt,
