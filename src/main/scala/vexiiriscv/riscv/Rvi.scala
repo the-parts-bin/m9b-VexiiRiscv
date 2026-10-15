@@ -103,6 +103,7 @@ object Rvi extends AreaObject {
   val CBM_CLEAN          = TypeCmb(M"000000000001_-----_010_00000_0001111")
   val CBM_FLUSH          = TypeCmb(M"000000000010_-----_010_00000_0001111")
   val CBM_INVALIDATE     = TypeCmb(M"000000000000_-----_010_00000_0001111")
+  val CBO_ZERO           = TypeCmb(M"000000000100_-----_010_00000_0001111")
 
   val AMOSWAPW           = TypeASQ(M"00001------------010-----0101111")
   val AMOADDW            = TypeASQ(M"00000------------010-----0101111")

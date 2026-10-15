@@ -702,6 +702,7 @@ class ParamSimple() {
       .text("Enable Zbs extension; suggest --with-isa zbs.")
     opt[Unit]("with-rvZcbm").action { (v, c) => addISA("zicbom"); }
       .text("Enable Zicbom extension; suggest --with-isa zicbom.")
+    opt[Unit]("with-rvZicboz") action { (v, c) => addISA("zicboz"); }
     opt[Unit]("with-rvZcbm-llc").action { (v, c) => addISA("zicbom"); withRvcbmLlc = true }
       .text("Enable Zicbom and LLC integration; suggest --with-isa zicbom without LLC integration.")
     opt[Unit]("with-rvZknAes").action { (v, c) => addISA("zkne", "zknd") }
@@ -1211,6 +1212,7 @@ class ParamSimple() {
         storeBufferOps = lsuStoreBufferOps,
         softwarePrefetch = lsuSoftwarePrefetch,
         withCbm = extension.withZicbom,
+        withCboZero = extension.withZicboz,
         withLlcFlush = needLlc,
         pmpPortParameter = lsuL1PmpParam.offset(extension.withRvh.toInt),
         translationStorageParameter = lsuTsp,
