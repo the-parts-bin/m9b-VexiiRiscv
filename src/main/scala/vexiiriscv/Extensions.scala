@@ -87,6 +87,7 @@ object ExtensionList {
 
     /* Z* extensions */
     E("zicbom"),
+    E("zicboz"),
     E("zicsr").version(2, 0),
     E("zicntr").version(2, 0),
     E("zifencei").version(2, 0),
