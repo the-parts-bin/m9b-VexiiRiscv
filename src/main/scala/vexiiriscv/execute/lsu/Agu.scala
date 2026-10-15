@@ -21,6 +21,7 @@ object AguPlugin extends AreaObject {
   val SIZE = Payload(UInt(2 bits)) // bytes = 1 << SIZE
   val FLOAT = Payload(Bool())
   val CLEAN, INVALIDATE = Payload(Bool())
+  val ZERO = Payload(Bool()) // cbo.zero (Zicboz)
   val GUEST = Payload(Bool())
 }
 
@@ -31,7 +32,8 @@ object AguPlugin extends AreaObject {
 class AguFrontend(
     layer: LaneLayer,
     host: PluginHost,
-    withRvcbm : Boolean = false
+    withRvcbm : Boolean = false,
+    withRvcboz : Boolean = false
   ) extends ExecuteUnitElementSimple.Api(
     layer,
     host.find[SrcPlugin](_.layer == layer),
@@ -40,7 +42,7 @@ class AguFrontend(
   import AguPlugin._
   val sk = SrcKeys
 
-  val defaultsDecodings = mutable.LinkedHashMap(LOAD -> False, STORE -> False, EXECUTE -> False, ATOMIC -> False, FLOAT -> False, CLEAN -> False, INVALIDATE -> False, GUEST -> False)
+  val defaultsDecodings = mutable.LinkedHashMap(LOAD -> False, STORE -> False, EXECUTE -> False, ATOMIC -> False, FLOAT -> False, CLEAN -> False, INVALIDATE -> False, ZERO -> False, GUEST -> False)
   def dec(changed : (Payload[_ <: BaseType], Any)*) = {
     val ret =  mutable.LinkedHashMap[Payload[_ <: BaseType], Any]()
     ret ++= defaultsDecodings
@@ -112,5 +114,9 @@ class AguFrontend(
     cbms += add(Rvi.CBM_CLEAN).srcs(sk.Op.SRC1, sk.SRC1.RF).decode(dec(CLEAN -> True)).uop
     cbms += add(Rvi.CBM_FLUSH).srcs(sk.Op.SRC1, sk.SRC1.RF).decode(dec(CLEAN -> True, INVALIDATE -> True)).uop
     cbms += add(Rvi.CBM_INVALIDATE).srcs(sk.Op.SRC1, sk.SRC1.RF).decode(dec(INVALIDATE -> True)).uop
+  }
+  // cbo.zero: neither a load nor a store for the pipeline; the L1 zeroes the whole line (see LsuL1Plugin)
+  val cboz = withRvcboz generate new Area{
+    cbms += add(Rvi.CBO_ZERO).srcs(sk.Op.SRC1, sk.SRC1.RF).decode(dec(ZERO -> True)).uop
   }
 }

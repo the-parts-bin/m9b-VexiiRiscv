@@ -35,6 +35,7 @@ case class LsuL1Cmd() extends Bundle {
   val size = SIZE()
   val load, store, execute, atomic = Bool()
   val clean, invalidate = Bool()
+  val zero = Bool() // cbo.zero
   val guest = Bool()
   val storeId = Decode.STORE_ID()
 }
@@ -80,7 +81,8 @@ class LsuPlugin(var layer : LaneLayer,
                 var withLlcFlush : Boolean = false,
                 var storeRs2At : Int = 0, //Note that currently, it only apply for integer store (not float store)
                 var storeBufferSlots : Int = 0,
-                var storeBufferOps : Int = 0) extends FiberPlugin with DBusAccessService with LsuCachelessBusProvider with LsuService with CmoService{
+                var storeBufferOps : Int = 0,
+                var withCboZero : Boolean = false) extends FiberPlugin with DBusAccessService with LsuCachelessBusProvider with LsuService with CmoService{
   import timingParameter._
 
   if(withLlcFlush) assert(withCbm)
@@ -156,7 +158,7 @@ class LsuPlugin(var layer : LaneLayer,
 
     val trapPort = ts.newTrap(layer.lane.getExecuteAge(ctrlAt), Execute.LANE_AGE_WIDTH)
     val flushPort = ss.newFlushPort(layer.lane.getExecuteAge(ctrlAt), laneAgeWidth = Execute.LANE_AGE_WIDTH, withUopId = true)
-    val frontend = new AguFrontend(layer, host, withRvcbm = withCbm)
+    val frontend = new AguFrontend(layer, host, withRvcbm = withCbm, withRvcboz = withCboZero)
     val commitProbe = Flow(LsuCommitProbe()) // Used by the hardware prefetching plugin to learn about the software behavior
 
     // Extends the instruction specifications done by the AGU with sign extensions and flush behavior
@@ -480,6 +482,7 @@ class LsuPlugin(var layer : LaneLayer,
         port.atomic := ATOMIC
         port.clean := withCbm.mux(CLEAN || INVALIDATE && cbmCsr.invalIntoClean, False)
         port.invalidate := withCbm.mux(INVALIDATE, False)
+        port.zero := withCboZero.mux(ZERO, False)
         port.guest := GUEST
         port.op := LsuL1CmdOpcode.LSU
         if(softwarePrefetch) when(LSU_PREFETCH) { port.op := LsuL1CmdOpcode.PREFETCH }
@@ -505,6 +508,7 @@ class LsuPlugin(var layer : LaneLayer,
         port.atomic := False
         port.clean := False
         port.invalidate := False
+        port.zero := False
         port.guest := False
         port.op := LsuL1CmdOpcode.ACCESS
         port.storeId := 0
@@ -524,6 +528,7 @@ class LsuPlugin(var layer : LaneLayer,
         port.atomic := False
         port.clean := False
         port.invalidate := False
+        port.zero := False
         port.guest := False
         port.op := LsuL1CmdOpcode.FLUSH
         port.storeId := 0
@@ -546,6 +551,7 @@ class LsuPlugin(var layer : LaneLayer,
         port.atomic := False
         port.clean := False
         port.invalidate := False
+        port.zero := False
         port.guest := False
         port.storeId := 0
       }
@@ -564,6 +570,7 @@ class LsuPlugin(var layer : LaneLayer,
         port.atomic := False
         port.clean := False
         port.invalidate := False
+        port.zero := False
         port.guest := False
         port.op := LsuL1CmdOpcode.STORE_BUFFER
         storeBuffer.pop.ready := port.ready || flush
@@ -584,6 +591,7 @@ class LsuPlugin(var layer : LaneLayer,
       l1.STORE := arbiter.io.output.store
       l1.CLEAN := arbiter.io.output.clean
       l1.INVALID := arbiter.io.output.invalidate
+      l1.ZERO := arbiter.io.output.zero
       l1.GUEST := arbiter.io.output.guest
       l1.PREFETCH := arbiter.io.output.op === LsuL1CmdOpcode.PREFETCH
       l1.FLUSH := arbiter.io.output.op === LsuL1CmdOpcode.FLUSH
@@ -652,6 +660,7 @@ class LsuPlugin(var layer : LaneLayer,
     val preCtrl = new elp.Execute(ctrlAt-1){
       val MISS_ALIGNED = insert((1 to log2Up(LSLEN / 8)).map(i => l1.SIZE === i && l1.MIXED_ADDRESS(i - 1 downto 0) =/= 0).orR)
       if(withCbm) MISS_ALIGNED clearWhen(l1.CLEAN || l1.INVALID)
+      MISS_ALIGNED clearWhen(l1.ZERO) // cbo.zero acts on the line holding the address
       val IS_AMO = insert(SEL && l1.ATOMIC && l1.STORE && l1.LOAD)
     }
 
@@ -659,7 +668,7 @@ class LsuPlugin(var layer : LaneLayer,
       val cached = new PmaPort(Global.PHYSICAL_WIDTH, List(l1.LINE_BYTES), List(PmaLoad, PmaStore, PmaLoadExecute))
       val io = new PmaPort(Global.PHYSICAL_WIDTH, (0 to log2Up(Riscv.LSLEN / 8)).map(1 << _), List(PmaLoad, PmaStore, PmaLoadExecute))
       cached.cmd.address := stpk.TRANSLATED
-      cached.cmd.op(0) := l1.STORE
+      cached.cmd.op(0) := l1.STORE || l1.ZERO
       cached.cmd.op(1) := l1.EXECUTE
       io.cmd.address := stpk.TRANSLATED
       io.cmd.size := l1.SIZE.asBits
@@ -668,7 +677,7 @@ class LsuPlugin(var layer : LaneLayer,
 
       val CACHED_RSP = insert(cached.rsp)
       val IO_RSP = insert(io.rsp)
-      IO_RSP.fault.setWhen(l1.ATOMIC || FROM_ACCESS)
+      IO_RSP.fault.setWhen(l1.ATOMIC || FROM_ACCESS || l1.ZERO) // cbo.zero on IO: access fault
       val IO = insert(CACHED_RSP.fault && !IO_RSP.fault && !FENCE && !FROM_PREFETCH)
       val FROM_LSU_MSB_FAILED = insert(FROM_LSU && srcp.ADD_SUB.dropLow(Global.MIXED_WIDTH).asBools.map(_ =/= tpk.ADDRESS_EXTENSION).orR)
       MMU_PAGE_FAULT := tpk.PAGE_FAULT
@@ -858,7 +867,7 @@ class LsuPlugin(var layer : LaneLayer,
           lsuTrap := True
           trapPort.exception := True
           trapPort.code := CSR.MCAUSE_ENUM.LOAD_ACCESS_FAULT
-          trapPort.code(1) setWhen (l1.STORE)
+          trapPort.code(1) setWhen (l1.STORE || l1.ZERO)
         }
 
         val l1Failed = l1.SEL && (!onPma.CACHED_RSP.fault && (l1.HAZARD || (l1.MISS || l1.MISS_UNIQUE) && (l1.LOAD || l1.EXECUTE || l1.STORE)))
@@ -879,7 +888,7 @@ class LsuPlugin(var layer : LaneLayer,
           lsuTrap := True
           trapPort.exception := True
           trapPort.code := CSR.MCAUSE_ENUM.LOAD_ACCESS_FAULT
-          trapPort.code(1) setWhen (l1.STORE)
+          trapPort.code(1) setWhen (l1.STORE || l1.ZERO)
         }
 
         when(MMU_PAGE_FAULT) {
@@ -893,7 +902,7 @@ class LsuPlugin(var layer : LaneLayer,
           lsuTrap := True
           trapPort.exception := True
           trapPort.code := CSR.MCAUSE_ENUM.LOAD_ACCESS_FAULT
-          trapPort.code(1) setWhen (l1.STORE)
+          trapPort.code(1) setWhen (l1.STORE || l1.ZERO)
         }
 
         trapPort.arg(0, 2 bits) := (B(l1.EXECUTE) ## B(l1.STORE)).mux(

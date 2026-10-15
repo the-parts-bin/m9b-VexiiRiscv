@@ -662,6 +662,7 @@ class ParamSimple() {
     opt[Unit]("with-rvZbc") action { (v, c) => addISA("zbc") }
     opt[Unit]("with-rvZbs") action { (v, c) => addISA("zbs") }
     opt[Unit]("with-rvZcbm") action { (v, c) => addISA("zicbom"); }
+    opt[Unit]("with-rvZicboz") action { (v, c) => addISA("zicboz"); }
     opt[Unit]("with-rvZcbm-llc") action { (v, c) => addISA("zicbom"); withRvcbmLlc = true }
     opt[Unit]("with-rvZknAes") action { (v, c) => addISA("zkne", "zknd") }
     opt[Unit]("with-sxaia") action { (v, c) => addISA("smaia", "ssaia") }
@@ -1066,6 +1067,7 @@ class ParamSimple() {
         storeBufferOps = lsuStoreBufferOps,
         softwarePrefetch = lsuSoftwarePrefetch,
         withCbm = extension.withZicbom,
+        withCboZero = extension.withZicboz,
         withLlcFlush = needLlc,
         pmpPortParameter = lsuL1PmpParam.offset(extension.withRvh.toInt),
         translationStorageParameter = lsuTsp,
