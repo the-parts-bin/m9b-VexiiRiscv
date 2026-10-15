@@ -176,6 +176,7 @@ class ParamSimple() {
   var fetchForkAt = 0
   var btbSets = 512
   var btbHashWidth = 16
+  var btbTargetWidth = 0
   var embeddedJtagTap = false
   var embeddedJtagInstruction = false
   var embeddedSwd = false
@@ -771,6 +772,7 @@ class ParamSimple() {
       .text("Set the number of BTB sets; default: 512.")
     opt[Int]("btb-hash-width").action { (v, c) => btbHashWidth = v }
       .text("Set the BTB hash width in bits; default: 16.")
+    opt[Int]("btb-target-width") action { (v, c) => btbTargetWidth = v }
     opt[Unit]("regfile-async").action { (v, c) => regFileSync = false }
       .text("Use an asynchronous register file.")
     opt[Unit]("regfile-sync").action { (v, c) => regFileSync = true }
@@ -985,6 +987,7 @@ class ParamSimple() {
         dualPortRam = btbDualPortRam,
         rasDepth = if(withRas) 4 else 0,
         hashWidth = btbHashWidth,
+        targetWidth = btbTargetWidth,
         readAt = 0,
         hitAt = 1+relaxedBtbHit.toInt,
         jumpAt = 1+relaxedBtb.toInt,

@@ -29,6 +29,9 @@ class BtbPlugin(var sets : Int,
                 var dualPortRam : Boolean,
                 var rasDepth : Int = 4,
                 var hashWidth : Int = 16,
+                // Target bits stored per entry (in slices, as PC_TARGET); 0 = all. The bits above come from
+                // the fetch PC, so jumps leaving that aligned window are mispredicted (and corrected later).
+                var targetWidth : Int = 0,
                 var readAt : Int = 0,
                 var hitAt : Int = 1,
                 var jumpAt : Int = 1,
@@ -107,7 +110,7 @@ class BtbPlugin(var sets : Int,
     case class BtbEntry() extends Bundle {
       val hash = UInt(hashWidth bits)
       val sliceLow  = SLICE_LOW()
-      val pcTarget = PC_TARGET()
+      val pcTarget = if (targetWidth == 0) PC_TARGET() else UInt(targetWidth bits)
       val isBranch, isPush, isPop = Bool()
       val taken = !withCondPrediction generate Bool() //TODO remove
     }
@@ -161,7 +164,7 @@ class BtbPlugin(var sets : Int,
       for(data <- memWrite.data) {
         data.hash := hash
         data.sliceLow := cmd.pcOnLastSlice(SLICE_LOW_RANGE)
-        data.pcTarget := cmd.pcTarget >> Fetch.SLICE_RANGE_LOW
+        data.pcTarget := (cmd.pcTarget >> Fetch.SLICE_RANGE_LOW).resized
         data.isBranch := cmd.isBranch
         data.isPush := cmd.isPush
         data.isPop := cmd.isPop
@@ -233,7 +236,9 @@ class BtbPlugin(var sets : Int,
       val correctionSent = RegInit(False) setWhen (isValid) clearWhen (up.isReady || up.isCancel)
       val doIt = needIt && !correctionSent
       val entry = OHMux.or(chunksTakenOh, chunksLogic.map(_.readRsp.ENTRY).map(this (_)), bypassIfSingle = true)
-      val pcTarget = CombInit(entry.pcTarget)
+      val pcTarget = PC_TARGET()
+      pcTarget := (apply(WORD_PC) >> Fetch.SLICE_RANGE_LOW).resized
+      pcTarget(0, widthOf(entry.pcTarget) bits) := entry.pcTarget
       if(withRas) when(entry.isPop){ pcTarget := ras.read }
       val doItSlice = OHToUInt(chunksTakenOh) @@ entry.sliceLow
 
