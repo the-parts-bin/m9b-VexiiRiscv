@@ -103,6 +103,11 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
                   var tagsReadAsync: Boolean = false,
                   var withCoherency: Boolean = false,
                   var withBypass: Boolean = false,
+                  // The data banks are written in whole CPU words only (no byte masks): a
+                  // store writes its word merged with the bypassed read data (needs withBypass).
+                  // For FPGAs whose RAM byte enables misbehave (GW1NR-9: a lane enabled in one
+                  // write leaks into the next back-to-back write on that port).
+                  var wordWrites: Boolean = false,
                   var probeIdWidth: Int = -1,
                   var ackIdWidth: Int = -1,
                   var bootMemClear : Boolean) extends FiberPlugin with InitService with LsuL1Service{
@@ -190,6 +195,8 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
     val memToBankRatio = bankWidth * bankCount / memDataWidth
     val bankWord = HardType(Bits(bankWidth bits))
     val bankWordPerLine = lineSize * 8 / bankWidth
+    if (wordWrites) assert(withBypass, "wordWrites needs withBypass (stores merge with the bypassed read data)")
+    val bankMaskWidth = if (wordWrites) bankWidth / cpuWordWidth else bankWidth / 8   // bank write mask granularity
 
     assert(bankWidth <= memDataWidth)
 
@@ -241,7 +248,7 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
       val mask = Bits(bankCount bits)
       val address = UInt(log2Up(bankWordCount) bits).assignDontCare()
       val writeData = Bits(bankWidth bits).assignDontCare()
-      val writeMask = Bits(bankWidth/8 bits).assignDontCare()
+      val writeMask = Bits(bankMaskWidth bits).assignDontCare()
     }
 
     val waysWrite = new Area {
@@ -257,7 +264,7 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
     val banks = for (id <- 0 until bankCount) yield new Area {
       val usedByWriteback = Bool()
       val mem = Mem(Bits(bankWidth bits), bankWordCount)
-      val write = mem.writePortWithMask(mem.getWidth / 8)
+      val write = mem.writePortWithMask(bankMaskWidth)
       if(withMergedBanksWrite) {
         write.valid := banksWrite.mask(id)
         write.address := banksWrite.address
@@ -980,9 +987,20 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
 
         when(bankWriteReservation.win) {
           banksWrite.address := PHYSICAL_ADDRESS(lineRange.high downto log2Up(bankWidth / 8))
-          banksWrite.writeData.subdivideIn(cpuWordWidth bits).foreach(_ := WRITE_DATA)
-          banksWrite.writeMask := 0
-          banksWrite.writeMask.subdivideIn(cpuWordWidth / 8 bits)(PHYSICAL_ADDRESS(bankWordToCpuWordRange)) := MASK
+          if (!wordWrites) {
+            banksWrite.writeData.subdivideIn(cpuWordWidth bits).foreach(_ := WRITE_DATA)
+            banksWrite.writeMask := 0
+            banksWrite.writeMask.subdivideIn(cpuWordWidth / 8 bits)(PHYSICAL_ADDRESS(bankWordToCpuWordRange)) := MASK
+          } else {
+            // the whole word: the stored bytes over the word as read (with the bypass)
+            val merged = Bits(cpuWordWidth bits)
+            for (i <- 0 until cpuWordWidth / 8) {
+              merged(i * 8, 8 bits) := MASK(i) ? WRITE_DATA(i * 8, 8 bits) | BYPASSED_DATA(i * 8, 8 bits)
+            }
+            banksWrite.writeData.subdivideIn(cpuWordWidth bits).foreach(_ := merged)
+            banksWrite.writeMask := 0
+            banksWrite.writeMask(PHYSICAL_ADDRESS(bankWordToCpuWordRange)) := True
+          }
           for ((bank, bankId) <- banks.zipWithIndex) when(WAYS_HITS(bankId)) {
             banksWrite.mask(bankId) := bankId === bankHitId && doWrite
 //            bank.write.valid := bankId === bankHitId && allowSideEffects
