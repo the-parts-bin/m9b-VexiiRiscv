@@ -168,6 +168,7 @@ class ParamSimple() {
   var lsuL1TagsReadAsync = false
   var lsuMemDataWidthMin = 32
   var withLsuBypass = false
+  var lsuL1WordWrites = false
   var withIterativeShift = false
   var divRadix = 2
   var divImpl = ""
@@ -739,6 +740,7 @@ class ParamSimple() {
     opt[Int]("lsu-l1-mem-data-width-min").unbounded() action { (v, c) => lsuMemDataWidthMin = v }
     opt[Unit]("lsu-l1-coherency") action { (v, c) => lsuL1Coherency = true}
     opt[Unit]("with-lsu-bypass") action { (v, c) => withLsuBypass = true }
+    opt[Unit]("lsu-l1-word-writes") action { (v, c) => lsuL1WordWrites = true; withLsuBypass = true }
     opt[Unit]("without-lsu-bypass") action { (v, c) => withLsuBypass = false }
     opt[Unit]("with-iterative-shift") action { (v, c) => withIterativeShift = true }
     opt[Int]("div-radix") action { (v, c) => divRadix = v }
@@ -1090,6 +1092,7 @@ class ParamSimple() {
         setCount       = lsuL1Sets,
         wayCount       = lsuL1Ways,
         withBypass     = withLsuBypass,
+        wordWrites     = lsuL1WordWrites,
         withCoherency  = lsuL1Coherency,
         withCbm        = extension.withZicbom && !needLlc,
         bootMemClear = bootMemClear,
