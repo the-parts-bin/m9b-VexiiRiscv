@@ -985,6 +985,11 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
         shared.write.data.plru := plruLogic.core.io.update.state
         shared.write.data.dirty := (SHARED.dirty | WAYS_HITS.andMask(doWrite) | UIntToOh(zeroWay).andMask(doZero)) & ~(UIntToOh(refillWayWithoutUpdate).andMask(doRefill) | needFlushOh.andMask(doFlush))
 
+        val wordMerged = Bits(cpuWordWidth bits)
+        for (i <- 0 until cpuWordWidth / 8) {
+          wordMerged(i * 8, 8 bits) := MASK(i) ? WRITE_DATA(i * 8, 8 bits) | BYPASSED_DATA(i * 8, 8 bits)
+        }
+
         when(bankWriteReservation.win) {
           banksWrite.address := PHYSICAL_ADDRESS(lineRange.high downto log2Up(bankWidth / 8))
           if (!wordWrites) {
@@ -993,11 +998,7 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
             banksWrite.writeMask.subdivideIn(cpuWordWidth / 8 bits)(PHYSICAL_ADDRESS(bankWordToCpuWordRange)) := MASK
           } else {
             // the whole word: the stored bytes over the word as read (with the bypass)
-            val merged = Bits(cpuWordWidth bits)
-            for (i <- 0 until cpuWordWidth / 8) {
-              merged(i * 8, 8 bits) := MASK(i) ? WRITE_DATA(i * 8, 8 bits) | BYPASSED_DATA(i * 8, 8 bits)
-            }
-            banksWrite.writeData.subdivideIn(cpuWordWidth bits).foreach(_ := merged)
+            banksWrite.writeData.subdivideIn(cpuWordWidth bits).foreach(_ := wordMerged)
             banksWrite.writeMask := 0
             banksWrite.writeMask(PHYSICAL_ADDRESS(bankWordToCpuWordRange)) := True
           }
@@ -1068,8 +1069,15 @@ class LsuL1Plugin(val lane : ExecuteLaneService,
         val brs = lane.execute(bankReadAt)
         brs(EVENT_WRITE_VALID)   := doWrite
         brs(EVENT_WRITE_ADDRESS) := PHYSICAL_ADDRESS
-        brs(EVENT_WRITE_DATA)    := WRITE_DATA
-        brs(EVENT_WRITE_MASK)    := MASK
+        // (wordWrites: the store rewrites the whole word, so a read of it in the same
+        // cycle collides in all its bytes, not just the stored ones: bypass them all.)
+        if (wordWrites) {
+          brs(EVENT_WRITE_DATA)  := wordMerged
+          brs(EVENT_WRITE_MASK).setAll()
+        } else {
+          brs(EVENT_WRITE_DATA)  := WRITE_DATA
+          brs(EVENT_WRITE_MASK)  := MASK
+        }
 
 
 
