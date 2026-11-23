@@ -67,3 +67,6 @@ tmp/
 
 vnc_done
 docker_xfce4.lop
+
+# m20: gen.sh output (generated VexiiRiscv.v per variant)
+/gen/

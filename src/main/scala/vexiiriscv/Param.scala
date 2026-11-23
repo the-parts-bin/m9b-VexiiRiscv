@@ -128,6 +128,7 @@ class ParamSimple() {
   var gshareBanks = 1
   var btbDualPortRam = true
   var fpuIgnoreSubnormal = false
+  var fpuRelaxedInt = false // FP compare/class/fmv.x.w write integers at stage 2, not 1 (timing)
   var fpuWbAt = 2
   var fpuMulParam = FpuMulParam()
   var fpuAddSharedParam = FpuAddSharedParam()
@@ -727,6 +728,8 @@ class ParamSimple() {
       .text("Use reduced-accuracy FMA arithmetic.")
     opt[Unit]("fpu-ignore-subnormal").action { (v, c) => fpuIgnoreSubnormal = true }
       .text("Ignore floating-point subnormal values.")
+    opt[Unit]("fpu-relaxed-int").action { (v, c) => fpuRelaxedInt = true }
+      .text("FP compare/class/fmv.x.w write integers at the writeback stage (timing).")
     opt[Unit]("with-aligner-buffer").unbounded().action { (v, c) => withAlignerBuffer = true }
       .text("Enable the instruction aligner buffer.")
     opt[Unit]("with-dispatcher-buffer").action { (v, c) => withDispatcherBuffer = true }
@@ -1397,10 +1400,10 @@ class ParamSimple() {
       plugins += new execute.fpu.FpuAddPlugin(early0)
       plugins += new execute.fpu.FpuMulPlugin(early0, p = fpuMulParam)
       plugins += new execute.fpu.FpuSqrtPlugin(early0)
-      plugins += new execute.fpu.FpuClassPlugin(early0)
-      plugins += new execute.fpu.FpuCmpPlugin(early0)
+      plugins += new execute.fpu.FpuClassPlugin(early0, wbAt = fpuRelaxedInt.mux(intWritebackAt, 1))
+      plugins += new execute.fpu.FpuCmpPlugin(early0, cmpAt = fpuRelaxedInt.toInt, intWbAt = fpuRelaxedInt.mux(intWritebackAt, 1), floatWbAt = fpuRelaxedInt.mux(2, 1))
       plugins += new execute.fpu.FpuF2iPlugin(early0)
-      plugins += new execute.fpu.FpuMvPlugin(early0, floatWbAt = 2)
+      plugins += new execute.fpu.FpuMvPlugin(early0, intWbAt = fpuRelaxedInt.mux(intWritebackAt, 1), floatWbAt = 2)
       if(extension.withRvd || extension.withRvq || extension.withZfh) plugins += new execute.fpu.FpuXxPlugin(early0)
       plugins += new execute.fpu.FpuDivPlugin(early0)
       plugins += new execute.fpu.FpuPackerPlugin(lane0, ignoreSubnormal = fpuIgnoreSubnormal, wbAt = fpuWbAt)
